@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
     std::vector<int> pdg;
     std::vector<float> energy, u, v, w, x, y, z;
     tree->Branch("pdgcode", &pdg);
-    tree->Branch("energy_MEV",  &energy);
+    tree->Branch("energy_MeV",  &energy);
     tree->Branch("u",       &u);
     tree->Branch("v",       &v);
     tree->Branch("w",       &w);
