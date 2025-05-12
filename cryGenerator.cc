@@ -19,7 +19,9 @@ int cryToPDG(int idCode,int charge);
 int main(int argc, char* argv[]) {
     
     //How many particles to throw
-    int nps=1000000;
+    int nps=10000000;
+    float altitude = 0;          
+    float latitude = 37.229572;  
 
     //Parse command line
     std::string outputName = "cry_output.root";  // default
@@ -37,17 +39,21 @@ int main(int argc, char* argv[]) {
 
     //Configure CRY
     //Blacksburg = 37.229572
-    std::string inputConfig = R"(returnMuons 1
-        returnNeutrons 1
-        returnProtons 1
-        returnGammas 1
-        returnElectrons 1
-        returnPions 1
-        subboxLength 300
-        altitude 0
-        date 3-6-2015
-        latitude 37.229572
-        )";
+
+    std::ostringstream configStream;
+    configStream << R"(returnMuons 1
+    returnNeutrons 1
+    returnProtons 1
+    returnGammas 1
+    returnElectrons 1
+    returnPions 1
+    subboxLength 300
+    altitude )" << altitude << R"(
+    date 3-6-2015
+    latitude )" << latitude << R"(
+    )";
+    
+    std::string inputConfig = configStream.str();
 
     //Load setup file, create generator
     CRYSetup* setup = new CRYSetup(inputConfig, cryDataDir);
@@ -57,21 +63,26 @@ int main(int argc, char* argv[]) {
     TFile* outfile = new TFile(outputName.c_str(), "RECREATE");
     TTree* tree = new TTree("cryTree", "CRY particles");
 
-    std::vector<int> pdg;
-    std::vector<float> energy, u, v, w, x, y, z;
-    tree->Branch("pdgcode", &pdg);
+    std::vector<int> pdgCode;
+    std::vector<float> energy;
+    std::vector<float> x, y;
+    std::vector<float> u,v,w;
+    
+    tree->Branch("pdgCode", &pdgCode);
     tree->Branch("energy_MeV",  &energy);
     tree->Branch("u",       &u);
     tree->Branch("v",       &v);
     tree->Branch("w",       &w);
-    tree->Branch("x_cm",       &x);
-    tree->Branch("y_cm",       &y);
+    tree->Branch("x_mm",       &x);
+    tree->Branch("y_mm",       &y);
 
     // Generate N events
     int i=0;
+    int generatedPrimaries=0;
     while (i < nps) {
         std::vector<CRYParticle *> particles;
         gen->genEvent(&particles);
+        generatedPrimaries++;
         
         //Calculate core of event
         double coreX = 0;
@@ -85,29 +96,47 @@ int main(int argc, char* argv[]) {
         if ((coreX > 100) || (coreY > 100)) continue; 
 
         //Clear vectors
-        pdg.clear();
+        pdgCode.clear();
         energy.clear();
         u.clear();
         v.clear();
         w.clear();
         x.clear();
         y.clear();
-        z.clear();
 
         //Push back particles
         for (CRYParticle* p : particles) {
-            pdg.push_back( cryToPDG(p->id(),p->charge()) );  // fallback to 0 if unknown
-            energy.push_back(p->ke());
+            pdgCode.push_back( cryToPDG(p->id(),p->charge()) );  // fallback to 0 if unknown
+            energy.push_back(p->ke()*1000);
             u.push_back(p->u());
             v.push_back(p->v());
             w.push_back(p->w());
-            x.push_back(100*(p->x()-coreX));
-            y.push_back(100*(p->y()-coreY));
+            x.push_back(1000*(p->x()-coreX));
+            y.push_back(1000*(p->y()-coreY));
         }
         //Fill
         tree->Fill();
         i++;
     }
+
+    //Make header tree
+    // Create a new tree for metadata
+    TTree* headerTree = new TTree("headerTree", "CRY metadata");
+
+    // Variables to store
+    float timeSimulated_s = gen->timeSimulated();
+    timeSimulated_s *= (nps/float(generatedPrimaries));
+    int nEvents = nps;
+
+    // Link branches
+    headerTree->Branch("altitude", &altitude);
+    headerTree->Branch("latitude", &latitude);
+    headerTree->Branch("timeSimulated_s", &timeSimulated_s);
+    headerTree->Branch("nEvents", &nEvents);
+
+    // Fill once
+    headerTree->Fill();
+    headerTree->Write("headerTree", TObject::kOverwrite);
 
     //Write
     outfile->cd();
