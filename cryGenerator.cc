@@ -13,10 +13,30 @@
 
 int cryToPDG(int idCode,int charge);
 
-int main() {
-    int nps=100000;
+//This calculates CRs at a specified location on a specified date.
+//TODO: 
+// - Some kind of averaging if we have a long exposure?
+int main(int argc, char* argv[]) {
+    
+    //How many particles to throw
+    int nps=1000000;
 
-    // Configuration string — same format as CRY input
+    //Parse command line
+    std::string outputName = "cry_output.root";  // default
+    if (argc > 1) {
+        outputName = argv[1];
+    }
+
+    //Check CRY paths set
+    const char* crypath = std::getenv("CRYPATH");
+    if (!crypath) {
+        std::cerr << "Error: CRYPATH environment variable not set." << std::endl;
+        return 1;
+    }
+    std::string cryDataDir = std::string(crypath) + "/../data";
+
+    //Configure CRY
+    //Blacksburg = 37.229572
     std::string inputConfig = R"(returnMuons 1
         returnNeutrons 1
         returnProtons 1
@@ -26,35 +46,26 @@ int main() {
         subboxLength 300
         altitude 0
         date 3-6-2015
-        latitude 45
+        latitude 37.229572
         )";
 
-    const char* crypath = std::getenv("CRYPATH");
-    if (!crypath) {
-        std::cerr << "Error: CRYPATH environment variable not set." << std::endl;
-        return 1;
-    }
-    std::string cryDataDir = std::string(crypath) + "/../data";
-
-    //Load setup file
+    //Load setup file, create generator
     CRYSetup* setup = new CRYSetup(inputConfig, cryDataDir);
-    
-    //Create CRY generator
     CRYGenerator *gen = new CRYGenerator(setup);
 
     //Set-up output file
-    TFile* outfile = new TFile("cry_output.root", "RECREATE");
-    TTree* tree = new TTree("cry", "CRY particle output");
+    TFile* outfile = new TFile(outputName.c_str(), "RECREATE");
+    TTree* tree = new TTree("cryTree", "CRY particles");
 
     std::vector<int> pdg;
     std::vector<float> energy, u, v, w, x, y, z;
     tree->Branch("pdgcode", &pdg);
-    tree->Branch("energy",  &energy);
+    tree->Branch("energy_MEV",  &energy);
     tree->Branch("u",       &u);
     tree->Branch("v",       &v);
     tree->Branch("w",       &w);
-    tree->Branch("x",       &x);
-    tree->Branch("y",       &y);
+    tree->Branch("x_cm",       &x);
+    tree->Branch("y_cm",       &y);
 
     // Generate N events
     int i=0;
@@ -62,6 +73,7 @@ int main() {
         std::vector<CRYParticle *> particles;
         gen->genEvent(&particles);
         
+        //Calculate core of event
         double coreX = 0;
         double coreY = 0;
         for (auto* p : particles) coreX += p->x();
@@ -69,8 +81,10 @@ int main() {
         coreX /= particles.size();
         coreY /= particles.size();
 
+        //Only keep central (fully contained) events
         if ((coreX > 100) || (coreY > 100)) continue; 
 
+        //Clear vectors
         pdg.clear();
         energy.clear();
         u.clear();
@@ -80,21 +94,24 @@ int main() {
         y.clear();
         z.clear();
 
+        //Push back particles
         for (CRYParticle* p : particles) {
             pdg.push_back( cryToPDG(p->id(),p->charge()) );  // fallback to 0 if unknown
             energy.push_back(p->ke());
             u.push_back(p->u());
             v.push_back(p->v());
             w.push_back(p->w());
-            x.push_back(p->x()-coreX);
-            y.push_back(p->y()-coreY);
+            x.push_back(100*(p->x()-coreX));
+            y.push_back(100*(p->y()-coreY));
         }
+        //Fill
         tree->Fill();
         i++;
     }
 
+    //Write
     outfile->cd();
-    tree->Write();
+    tree->Write("cryTree",TObject::kOverwrite);
     outfile->Close();
 }
 
