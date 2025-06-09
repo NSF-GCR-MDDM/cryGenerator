@@ -8,7 +8,7 @@ RANLIB := ranlib
 SRC := $(wildcard *.cc)
 OBJ := $(SRC:%.cc=%.o)
 DEP := $(SRC:%.cc=.%.d)
-LIB := libCRY.a
+LIB := ../lib/libCRY.a
 
 default: $(LIB)
 
