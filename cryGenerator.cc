@@ -19,9 +19,11 @@ int cryToPDG(int idCode,int charge);
 int main(int argc, char* argv[]) {
     
     //How many particles to throw
-    int nps=10000000;
+    int nps=2e7;
     float altitude = 0;          
-    float latitude = 37.229572;  
+    float latitude = 47.60095;  //Blacksburg = 37.229572, Leibstadt = 47.60095
+    int length_m = 300; //m, limit options in cry
+
 
     //Parse command line
     std::string outputName = "cry_output.root";  // default
@@ -38,18 +40,16 @@ int main(int argc, char* argv[]) {
     std::string cryDataDir = std::string(crypath) + "/../data";
 
     //Configure CRY
-    //Blacksburg = 37.229572
-
     std::ostringstream configStream;
-    configStream << R"(returnMuons 1
+    configStream << R"(returnMuons 0
     returnNeutrons 1
-    returnProtons 1
-    returnGammas 1
-    returnElectrons 1
-    returnPions 1
-    subboxLength 300
+    returnProtons 0
+    returnGammas 0
+    returnElectrons 0
+    returnPions 0
+    subboxLength )" << length_m << R"(
     altitude )" << altitude << R"(
-    date 3-6-2015
+    date 9-6-2025
     latitude )" << latitude << R"(
     )";
     
@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
         //Push back particles
         for (CRYParticle* p : particles) {
             pdgCode.push_back( cryToPDG(p->id(),p->charge()) );  // fallback to 0 if unknown
-            energy.push_back(p->ke()*1000);
+            energy.push_back(p->ke());
             u.push_back(p->u());
             v.push_back(p->v());
             w.push_back(p->w());
@@ -123,16 +123,17 @@ int main(int argc, char* argv[]) {
     // Create a new tree for metadata
     TTree* headerTree = new TTree("headerTree", "CRY metadata");
 
-    // Variables to store
+    //Normalization
     float timeSimulated_s = gen->timeSimulated();
-    timeSimulated_s *= (nps/float(generatedPrimaries));
-    int nEvents = nps;
+    float areaSimulated_cm2 = (length_m*100)*(length_m*100);
+    float totalPrimariesSimulated = float(generatedPrimaries);
+    float norm = totalPrimariesSimulated/(timeSimulated_s*areaSimulated_cm2);
 
     // Link branches
     headerTree->Branch("altitude", &altitude);
     headerTree->Branch("latitude", &latitude);
-    headerTree->Branch("timeSimulated_s", &timeSimulated_s);
-    headerTree->Branch("nEvents", &nEvents);
+    headerTree->Branch("primaries_per_cm2_per_s", &norm);
+    headerTree->Branch("nEvents", &nps);
 
     // Fill once
     headerTree->Fill();
