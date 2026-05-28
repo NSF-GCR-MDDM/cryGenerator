@@ -20,14 +20,15 @@ int cryToPDG(int idCode,int charge);
 // - Some kind of time-averaging option for a long exposure?
 int main(int argc, char* argv[]) {
     auto startTime = std::chrono::steady_clock::now();
-
-    int fiducial_halfwidth_m = 100;
+    bool SAVE_ANGLES = false; //If you want to store the angles in the output tree, for debugging.
 
     //How many particles to throw
     int nps=1.5e7;
     float altitude = 0; //m, limited options in cry:  0, 2100, and 11300.        
     float latitude = 37.229572;  //Blacksburg = 37.229572, Leibstadt = 47.60095
-    int length_m = 300; //m, limited options in cry: 1, 3, 10, 30, 100, and 300 m
+    int length_m = 70; //m, limited options in cry: 1, 3, 10, 30, 100, and 300 m
+                        //For box sizes in between these discrete values, the next 
+                        // largest table is utilized and particles outside of the specified window are dropped.
 
 
     //Parse command line
@@ -81,25 +82,18 @@ int main(int argc, char* argv[]) {
     tree->Branch("x_mm",       &x);
     tree->Branch("y_mm",       &y);
 
+    std::vector<float> theta,phi;
+    if (SAVE_ANGLES==true) {
+        tree->Branch("theta",       &theta);
+        tree->Branch("phi",       &phi);
+    }
     // Generate N events
     int i=0;
-    int savedPrimaries=0;
     while (i < nps) {
         std::vector<CRYParticle *> particles;
+        particles.clear();
         gen->genEvent(&particles);
-        
-        //Calculate core of event
-        double coreX = 0;
-        double coreY = 0;
-        for (auto* p : particles) coreX += p->x();
-        for (auto* p : particles) coreY += p->y();
-        coreX /= particles.size();
-        coreY /= particles.size();
-
-        //Only keep central (fully contained) events
-        if ((std::abs(coreX) > fiducial_halfwidth_m) || (std::abs(coreY) > fiducial_halfwidth_m)) continue; 
-        savedPrimaries++;
-
+    
         //Clear vectors
         pdgCode.clear();
         energy.clear();
@@ -108,6 +102,8 @@ int main(int argc, char* argv[]) {
         w.clear();
         x.clear();
         y.clear();
+        theta.clear();
+        phi.clear();
 
         //Push back particles
         for (CRYParticle* p : particles) {
@@ -116,8 +112,12 @@ int main(int argc, char* argv[]) {
             u.push_back(p->u());
             v.push_back(p->v());
             w.push_back(p->w());
-            x.push_back(1000*(p->x()-coreX)); //Default units are m, we convert to mm for our branch
-            y.push_back(1000*(p->y()-coreY)); 
+            x.push_back(1000*(p->x())); //Default units are m, we convert to mm for our branch
+            y.push_back(1000*(p->y())); 
+            if (SAVE_ANGLES==true) {
+                theta.push_back(std::acos(-p->w()));
+                phi.push_back(std::atan2(p->v(), p->u()));
+            }
         }
         //Fill
         tree->Fill();
@@ -130,15 +130,14 @@ int main(int argc, char* argv[]) {
 
     //Normalization
     float timeSimulated_s = gen->timeSimulated();
-    float areaSimulated_cm2 = (2*fiducial_halfwidth_m*100)*(2*fiducial_halfwidth_m*100);
-    float totalPrimariesSaved = float(savedPrimaries);
-    float norm = totalPrimariesSaved/(timeSimulated_s*areaSimulated_cm2);
+    float areaSimulated_cm2 = (length_m*100)*(length_m*100);
+    float norm = nps/(timeSimulated_s*areaSimulated_cm2);
 
     // Link branches
     headerTree->Branch("altitude", &altitude);
     headerTree->Branch("latitude", &latitude);
-    headerTree->Branch("primaries_per_cm2_per_s", &norm);
-    headerTree->Branch("nEvents", &savedPrimaries);
+    headerTree->Branch("showers_per_cm2_per_s", &norm);
+    headerTree->Branch("nEvents", &nps);
 
     // Fill once
     headerTree->Fill();
