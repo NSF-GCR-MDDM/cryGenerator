@@ -91,7 +91,6 @@ int main(int argc, char* argv[]) {
 
     // Generate N events
     int i=0;
-    int nSavedShowers = 0;
     while (i < nps) {
         std::vector<CRYParticle *> particles;
         particles.clear();
