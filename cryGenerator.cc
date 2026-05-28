@@ -23,13 +23,14 @@ int main(int argc, char* argv[]) {
     bool SAVE_ANGLES = false; //If you want to store the angles in the output tree, for debugging.
 
     //How many particles to throw
-    int nps=1.5e7;
+    int nps=2e7;
     float altitude = 0; //m, limited options in cry:  0, 2100, and 11300.        
     float latitude = 37.229572;  //Blacksburg = 37.229572, Leibstadt = 47.60095
     int length_m = 70; //m, limited options in cry: 1, 3, 10, 30, 100, and 300 m
-                        //For box sizes in between these discrete values, the next 
+                        // For box sizes in between these discrete values, the next 
                         // largest table is utilized and particles outside of the specified window are dropped.
-
+                        // We leave this set to the largest value and apply a fiducial volume cut. Then we center
+                        // shower particles around the geometric center of the shower. 
 
     //Parse command line
     std::string outputName = "cry_output.root";  // default
@@ -87,13 +88,15 @@ int main(int argc, char* argv[]) {
         tree->Branch("theta",       &theta);
         tree->Branch("phi",       &phi);
     }
+
     // Generate N events
     int i=0;
+    int nSavedShowers = 0;
     while (i < nps) {
         std::vector<CRYParticle *> particles;
         particles.clear();
         gen->genEvent(&particles);
-    
+
         //Clear vectors
         pdgCode.clear();
         energy.clear();
@@ -131,7 +134,7 @@ int main(int argc, char* argv[]) {
     //Normalization
     float timeSimulated_s = gen->timeSimulated();
     float areaSimulated_cm2 = (length_m*100)*(length_m*100);
-    float norm = nps/(timeSimulated_s*areaSimulated_cm2);
+    float norm = static_cast<float>(nps) / (timeSimulated_s*areaSimulated_cm2);
 
     // Link branches
     headerTree->Branch("altitude", &altitude);
