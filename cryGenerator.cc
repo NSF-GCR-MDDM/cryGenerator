@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <chrono>
+#include <cmath>
 
 #include "TTree.h"
 #include "TFile.h"
@@ -15,14 +17,17 @@ int cryToPDG(int idCode,int charge);
 
 //This calculates CRs at a specified location on a specified date.
 //TODO: 
-// - Some kind of averaging if we have a long exposure?
+// - Some kind of time-averaging option for a long exposure?
 int main(int argc, char* argv[]) {
-    
+    auto startTime = std::chrono::steady_clock::now();
+
+    int fiducial_halfwidth_m = 100;
+
     //How many particles to throw
-    int nps=2e7;
-    float altitude = 0;          
-    float latitude = 47.60095;  //Blacksburg = 37.229572, Leibstadt = 47.60095
-    int length_m = 300; //m, limit options in cry
+    int nps=1.5e7;
+    float altitude = 0; //m, limited options in cry:  0, 2100, and 11300.        
+    float latitude = 37.229572;  //Blacksburg = 37.229572, Leibstadt = 47.60095
+    int length_m = 300; //m, limited options in cry: 1, 3, 10, 30, 100, and 300 m
 
 
     //Parse command line
@@ -41,12 +46,12 @@ int main(int argc, char* argv[]) {
 
     //Configure CRY
     std::ostringstream configStream;
-    configStream << R"(returnMuons 0
+    configStream << R"(returnMuons 1
     returnNeutrons 1
-    returnProtons 0
+    returnProtons 1
     returnGammas 0
     returnElectrons 0
-    returnPions 0
+    returnPions 1
     subboxLength )" << length_m << R"(
     altitude )" << altitude << R"(
     date 9-6-2025
@@ -78,11 +83,10 @@ int main(int argc, char* argv[]) {
 
     // Generate N events
     int i=0;
-    int generatedPrimaries=0;
+    int savedPrimaries=0;
     while (i < nps) {
         std::vector<CRYParticle *> particles;
         gen->genEvent(&particles);
-        generatedPrimaries++;
         
         //Calculate core of event
         double coreX = 0;
@@ -93,7 +97,8 @@ int main(int argc, char* argv[]) {
         coreY /= particles.size();
 
         //Only keep central (fully contained) events
-        if ((coreX > 100) || (coreY > 100)) continue; 
+        if ((std::abs(coreX) > fiducial_halfwidth_m) || (std::abs(coreY) > fiducial_halfwidth_m)) continue; 
+        savedPrimaries++;
 
         //Clear vectors
         pdgCode.clear();
@@ -106,13 +111,13 @@ int main(int argc, char* argv[]) {
 
         //Push back particles
         for (CRYParticle* p : particles) {
-            pdgCode.push_back( cryToPDG(p->id(),p->charge()) );  // fallback to 0 if unknown
-            energy.push_back(p->ke());
+            pdgCode.push_back( cryToPDG(p->id(),p->charge()) ); 
+            energy.push_back(p->ke()); //Default unit is MeV
             u.push_back(p->u());
             v.push_back(p->v());
             w.push_back(p->w());
-            x.push_back(1000*(p->x()-coreX));
-            y.push_back(1000*(p->y()-coreY));
+            x.push_back(1000*(p->x()-coreX)); //Default units are m, we convert to mm for our branch
+            y.push_back(1000*(p->y()-coreY)); 
         }
         //Fill
         tree->Fill();
@@ -125,15 +130,15 @@ int main(int argc, char* argv[]) {
 
     //Normalization
     float timeSimulated_s = gen->timeSimulated();
-    float areaSimulated_cm2 = (length_m*100)*(length_m*100);
-    float totalPrimariesSimulated = float(generatedPrimaries);
-    float norm = totalPrimariesSimulated/(timeSimulated_s*areaSimulated_cm2);
+    float areaSimulated_cm2 = (2*fiducial_halfwidth_m*100)*(2*fiducial_halfwidth_m*100);
+    float totalPrimariesSaved = float(savedPrimaries);
+    float norm = totalPrimariesSaved/(timeSimulated_s*areaSimulated_cm2);
 
     // Link branches
     headerTree->Branch("altitude", &altitude);
     headerTree->Branch("latitude", &latitude);
     headerTree->Branch("primaries_per_cm2_per_s", &norm);
-    headerTree->Branch("nEvents", &nps);
+    headerTree->Branch("nEvents", &savedPrimaries);
 
     // Fill once
     headerTree->Fill();
@@ -143,6 +148,13 @@ int main(int argc, char* argv[]) {
     outfile->cd();
     tree->Write("cryTree",TObject::kOverwrite);
     outfile->Close();
+
+    auto endTime = std::chrono::steady_clock::now();
+    double runTime_s = std::chrono::duration<double>(endTime - startTime).count();
+
+    std::cout << "Finished CRY generation." << std::endl;
+    std::cout << "Run time: " << runTime_s << " s" << std::endl;
+    std::cout << "CRY simulation corresponds to: " << timeSimulated_s << " s of real time" << std::endl;
 }
 
 //neutron=0,proton=1,pion=2,kaon=3,muon=4,electron=5,gamma=6
