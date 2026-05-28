@@ -9,3 +9,9 @@ Code to create ROOT files of CRY events for use with external MC generators
 5. Add the following to your startup script: export CRYPATH=/path/to/cry_v1.7/src
 6. Run "make" from the cryGenerator main folder.
 7. ./cryGenerator
+
+# Usage:
+1. Specify your lattitude, and which particles you want to include in CRY
+2. Specify the area you plan on simulating particles on in GEANT4. This must be less than 300m
+3. Select the date for the simulation.
+4. After saving, do a "make". Then call via ./cryGenerator <output_name.root>
