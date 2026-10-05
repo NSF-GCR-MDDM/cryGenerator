@@ -23,10 +23,10 @@ int main(int argc, char* argv[]) {
     bool SAVE_ANGLES = false; //If you want to store the angles in the output tree, for debugging.
 
     //How many particles to throw
-    int nps=2e7;
+    int nps=2e8;
     float altitude = 0; //m, limited options in cry:  0, 2100, and 11300.        
     float latitude = 37.229572;  //Blacksburg = 37.229572, Leibstadt = 47.60095
-    int length_m = 70; //m, limited options in cry: 1, 3, 10, 30, 100, and 300 m
+    int length_m = 10; //m, limited options in cry: 1, 3, 10, 30, 100, and 300 m
                         // For box sizes in between these discrete values, the next 
                         // largest table is utilized and particles outside of the specified window are dropped.
                         // We leave this set to the largest value and apply a fiducial volume cut. Then we center
@@ -92,6 +92,9 @@ int main(int argc, char* argv[]) {
     // Generate N events
     int i=0;
     while (i < nps) {
+        if (i%1000000==0) {
+            std::cout<<"On CR shower "<<i<<" of "<<nps<<std::endl;
+        }
         std::vector<CRYParticle *> particles;
         particles.clear();
         gen->genEvent(&particles);
