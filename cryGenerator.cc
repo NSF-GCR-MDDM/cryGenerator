@@ -23,14 +23,12 @@ int main(int argc, char* argv[]) {
     bool SAVE_ANGLES = false; //If you want to store the angles in the output tree, for debugging.
 
     //How many particles to throw
-    int nps=2e8;
+    int nps=4e8;
     float altitude = 0; //m, limited options in cry:  0, 2100, and 11300.        
     float latitude = 37.229572;  //Blacksburg = 37.229572, Leibstadt = 47.60095
-    int length_m = 10; //m, limited options in cry: 1, 3, 10, 30, 100, and 300 m
+    int length_m = 100; //m, limited options in cry: 1, 3, 10, 30, 100, and 300 m
                         // For box sizes in between these discrete values, the next 
                         // largest table is utilized and particles outside of the specified window are dropped.
-                        // We leave this set to the largest value and apply a fiducial volume cut. Then we center
-                        // shower particles around the geometric center of the shower. 
 
     //Parse command line
     std::string outputName = "cry_output.root";  // default
@@ -127,6 +125,9 @@ int main(int argc, char* argv[]) {
         //Fill
         tree->Fill();
         i++;
+        for (CRYParticle* p : particles) {
+            delete p;
+        }
     }
 
     //Make header tree
@@ -143,6 +144,7 @@ int main(int argc, char* argv[]) {
     headerTree->Branch("latitude", &latitude);
     headerTree->Branch("showers_per_cm2_per_s", &norm);
     headerTree->Branch("nEvents", &nps);
+    headerTree->Branch("length_m", &length_m);
 
     // Fill once
     headerTree->Fill();
@@ -161,26 +163,29 @@ int main(int argc, char* argv[]) {
     std::cout << "CRY simulation corresponds to: " << timeSimulated_s << " s of real time" << std::endl;
 }
 
-//neutron=0,proton=1,pion=2,kaon=3,muon=4,electron=5,gamma=6
+//CRY IDs: neutron=0, proton=1, pion=2, kaon=3, muon=4, electron=5, gamma=6
 int cryToPDG(int cryID, int charge) {
     switch (cryID) {
-        case 0: return 2112; // neutron
-        case 1: return 2212; // proton
-        case 2: // pion
-            if (charge == 1) return 211;   // π+
-            else if (charge == -1) return -211; // π−
-        case 3: // kaon
-            if (charge == 1) return 321;   // K+
-            else if (charge == -1) return -321; // K−
-        case 4: // muon
-            if (charge == 1) return -13;
-            else if (charge ==-1) return 13;
-        case 5: // electron
-            if (charge == 1) return -11;
-            else if (charge ==-1) return 11;
-        case 6: return 22; // gamma
-        default: 
-            std::cout<<"Unknown particle found: "<<cryID<<","<<charge<<std::endl;       
-            return 0; // unknown
+        case 0: return 2112;                    // neutron
+        case 1: return 2212;                    // proton
+        case 2:                                 // pion
+            if (charge ==  1) return 211;       // pi+
+            if (charge == -1) return -211;      // pi-
+            break;
+        case 3:                                 // kaon
+            if (charge ==  1) return 321;       // K+
+            if (charge == -1) return -321;      // K-
+            break;
+        case 4:                                 // muon
+            if (charge ==  1) return -13;       // mu+
+            if (charge == -1) return 13;        // mu-
+            break;
+        case 5:                                 // electron
+            if (charge ==  1) return -11;       // e+
+            if (charge == -1) return 11;        // e-
+            break;
+        case 6: return 22;                      // gamma
     }
+    std::cout << "Unknown particle found: " << cryID << "," << charge << std::endl;
+    return 0;
 }
